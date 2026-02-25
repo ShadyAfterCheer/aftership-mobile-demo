@@ -8,6 +8,7 @@ export default function HomeScreen() {
       <Text style={styles.emoji}>📦</Text>
       <Text style={styles.title}>AfterShip Demo</Text>
       <Text style={styles.subtitle}>欢迎使用 Expo + React Native</Text>
+      <Text style={styles.version}>v1.0.0 - CI/CD Ready</Text>
     </View>
   );
 }
@@ -33,5 +34,10 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 16,
     color: '#666',
+  },
+  version: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 16,
   },
 });
