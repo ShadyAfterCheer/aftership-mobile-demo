@@ -1,0 +1,43 @@
+name: OTA Hotfix Update
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: 'Update channel'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+      message:
+        description: 'Update message'
+        required: true
+        type: string
+
+jobs:
+  ota-update:
+    name: Push OTA Update (${{ inputs.channel }})
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Publish OTA update
+        run: |
+          eas update \
+            --branch ${{ inputs.channel }} \
+            --message "${{ inputs.message }}" \
+            --non-interactive
