@@ -51,15 +51,68 @@ jobs:
         id: eas-update
         run: |
           BRANCH_NAME="pr-${{ github.event.pull_request.number }}"
-          eas update \
+          EAS_OUTPUT=$(eas update \
             --branch "$BRANCH_NAME" \
             --message "PR #${{ github.event.pull_request.number }}: ${{ github.event.pull_request.title }}" \
-            --non-interactive
+            --non-interactive \
+            --json 2>/dev/null || true)
 
-      - name: Comment QR code on PR
-        uses: expo/expo-github-action/preview-comment@v8
+          UPDATE_GROUP=$(echo "$EAS_OUTPUT" | jq -r '.[0].group // empty')
+          if [ -n "$UPDATE_GROUP" ]; then
+            echo "update_group=$UPDATE_GROUP" >> "$GITHUB_OUTPUT"
+            echo "Update group: $UPDATE_GROUP"
+          else
+            echo "Could not extract update group, raw output:"
+            echo "$EAS_OUTPUT"
+          fi
+
+      - name: Comment preview link on PR
+        uses: actions/github-script@v7
         with:
-          project: ./
-          channel: pr-${{ github.event.pull_request.number }}
-          comment: true
-          qr-target: expo-go
+          script: |
+            const updateGroup = '${{ steps.eas-update.outputs.update_group }}';
+            const projectId = '47ad8526-4de0-4c90-97bd-77588c4391cd';
+            const prNumber = context.issue.number;
+            const branch = `pr-${prNumber}`;
+
+            let body = `## 📱 EAS Update Preview\n\n`;
+            body += `**Branch:** \`${branch}\`\n\n`;
+
+            if (updateGroup) {
+              const expoUrl = `https://expo.dev/projects/${projectId}/updates/${updateGroup}`;
+              const qrContent = encodeURIComponent(`exp+aftership-mobile-demo://expo-development-client/?url=${encodeURIComponent(`https://u.expo.dev/${projectId}/group/${updateGroup}`)}`);
+              const qrUrl = `https://qr.expo.dev/eas-update?groupId=${updateGroup}&appScheme=exp%2Baftership-mobile-demo`;
+
+              body += `| Platform | QR Code |\n`;
+              body += `|---|---|\n`;
+              body += `| **Expo Go / Dev Client** | ![QR](${qrUrl}) |\n\n`;
+              body += `🔗 [View on Expo Dashboard](${expoUrl})\n\n`;
+            } else {
+              body += `⚠️ Update published but could not generate QR code.\n`;
+              body += `Check the [EAS Dashboard](https://expo.dev/projects/${projectId}/updates) for the latest update.\n\n`;
+            }
+
+            body += `> 📖 Open Expo Go on your phone and scan the QR code to preview this PR.`;
+
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+            });
+            const existing = comments.data.find(c => c.body?.includes('EAS Update Preview'));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body,
+              });
+            }
